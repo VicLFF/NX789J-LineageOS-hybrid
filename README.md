@@ -25,6 +25,23 @@
 
 ---
 
+## 实机截图
+
+> 全部来自红魔 10S Pro+（NX789J），系统为 LineageOS 23.2（`23.2-20261020-UNOFFICIAL-NX789J`），底包为官方 RedMagicOS 11.0.14。
+
+<table>
+  <tr>
+    <td align="center" width="33%"><img src="docs/screenshots/04-display-brightness.png" width="230" alt="显示设置"><br><sub><b>显示设置</b><br>「自动调节亮度」已出现并可用</sub></td>
+    <td align="center" width="33%"><img src="docs/screenshots/05-display-refresh-rate.png" width="230" alt="最高刷新率"><br><sub><b>最高刷新率</b><br>144Hz + 「流畅画面」开关</sub></td>
+    <td align="center" width="33%"><img src="docs/screenshots/06-refresh-rate-dialog.png" width="230" alt="刷新率选择"><br><sub><b>四档可切</b><br>60 / 90 / 120 / 144 Hz</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/03-call.png" width="230" alt="通话"><br><sub><b>通话</b><br>VoNR 建立，听筒 / 免提 / 麦克风正常</sub></td>
+    <td align="center"><img src="docs/screenshots/02-sms.png" width="230" alt="短信"><br><sub><b>短信</b><br>收发正常</sub></td>
+    <td align="center"><img src="docs/screenshots/01-lockscreen.png" width="230" alt="锁屏"><br><sub><b>锁屏</b><br>指纹图标为空白圆（已知问题）</sub></td>
+  </tr>
+</table>
+
 ## 完成度
 
 | | 功能 | 状态 |
@@ -293,6 +310,23 @@ E [gdix_tsa][UpdateFrameMissingFlag]: Missing frame, curFrameIdx(N+1), lastFrame
 > A from-scratch community port of LineageOS 23.2 (Android 16) to the **RedMagic 10S Pro+** (codename `NX789J`, also `NX789S`, SoC Qualcomm SM8750 "sun").
 >
 > **Approach: hybrid.** Only `system`, `system_ext` and `product` are replaced with LineageOS builds. The stock RedMagicOS `vendor`, `odm`, `vendor_dlkm`, `system_dlkm`, kernel and boot chain are kept untouched. This is the same seam the stock firmware itself uses (Android 16 system on an Android 15 GRF-frozen vendor).
+
+## Screenshots
+
+> All taken on a RedMagic 10S Pro+ (NX789J) running LineageOS 23.2 (`23.2-20261020-UNOFFICIAL-NX789J`) on top of stock RedMagicOS 11.0.14.
+
+<table>
+  <tr>
+    <td align="center" width="33%"><img src="docs/screenshots/04-display-brightness.png" width="230" alt="Display settings"><br><sub><b>Display settings</b><br>Auto-brightness entry present and working</sub></td>
+    <td align="center" width="33%"><img src="docs/screenshots/05-display-refresh-rate.png" width="230" alt="Peak refresh rate"><br><sub><b>Peak refresh rate</b><br>144 Hz plus the smooth-display switch</sub></td>
+    <td align="center" width="33%"><img src="docs/screenshots/06-refresh-rate-dialog.png" width="230" alt="Refresh rate picker"><br><sub><b>Four modes</b><br>60 / 90 / 120 / 144 Hz</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/03-call.png" width="230" alt="Call"><br><sub><b>Call</b><br>VoNR connected; earpiece / speaker / mic fine</sub></td>
+    <td align="center"><img src="docs/screenshots/02-sms.png" width="230" alt="SMS"><br><sub><b>SMS</b><br>Sending and receiving work</sub></td>
+    <td align="center"><img src="docs/screenshots/01-lockscreen.png" width="230" alt="Lock screen"><br><sub><b>Lock screen</b><br>Blank fingerprint circle (known issue)</sub></td>
+  </tr>
+</table>
 
 ## Status
 
