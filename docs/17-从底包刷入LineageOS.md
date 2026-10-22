@@ -74,6 +74,31 @@ python3 tools/vb_repack.py  work/  官方备份/vendor_boot.img  vendor_boot_nov
 
 ---
 
+## 2.5 双底包：11.0.13 与 11.0.14 各要一份 vendor_boot
+
+这一步用脚本就自动了，但得知道原理，否则会误判。
+
+两个底包的 `vendor_boot` 不一样（`fstab.qcom` 之外还有 dtb 与 vendor ramdisk 的差异），所以「去 avb」的成品也必须各做一份：
+
+| 底包 | 官方 `vendor_boot_a` md5 | 去 avb 后 md5 |
+|---|---|---|
+| RedMagicOS 11.0.14 | `5d427b57cecc7f32a19e041ee0550bde` | `03e9b98ad9328ec8a57a85ddcf799608` |
+| RedMagicOS 11.0.13 | `ccea408082a8b28b6d402ebf4a972f85` | `e75b05fc8b79ec7969e1189ad9e05e50` |
+
+```bash
+python tools/vb_repack.py 11.0.13/vendor_boot_a.img vendor_boot_1113.img   # -> e75b05fc…
+python tools/vb_repack.py 11.0.14/vendor_boot_a.img vendor_boot_1114.img   # -> 03e9b98a…
+```
+
+打包时两份都塞进包里，`update-binary` 在设备上按 md5 三选一：
+
+1. 命中官方 md5（左列）→ 写对应那份去 avb 版到 `vendor_boot_a` + `vendor_boot_b`；
+2. 命中去 avb md5（右列）→ 已经是了，跳过（可重复刷、幂等）；
+3. 其它 md5 → abort，提示只支持官方 11.0.13 / 11.0.14。
+
+**为什么用 md5 而不是版本号字符串**：`ro.build.display.id` / OTA 版本号会被第三方包改写，而 `vendor_boot` 的字节是底包自带的，用户改不动，比字符串可靠得多。
+
+EDL 包里对应两份 `rawprogram_los_1114.xml` / `rawprogram_los_1113.xml`，只有 `vendor_boot` 那两条的 `filename` 不同，其余偏移完全一样（super 布局与 userdata/metadata 位置在两个底包上一致）。
 ## 3. 需要准备的镜像
 
 本移植的产物（三张逻辑分区镜像）：

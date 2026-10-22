@@ -76,12 +76,14 @@
 | RedMagicOS **11.0.14** | `nubia/NX789J/NX789J:16/BQ2A.250705.001-BP2A.250605.031.A3/20260813.164726`，vendor 安全补丁 `2026-06-01`，`ro.vendor.product.ztemodel=NX789S_V2A` | **2026-10-22 全流程实测通过**：EDL 刷 OrangeFox → 卡刷 → 清 data → 开机。SIM/通话/移动数据/刷新率/自动亮度/37 个传感器/Wi-Fi 全部正常 |
 | RedMagicOS **11.0.13** | 早前的官方全分区备份 | 更早的版本在它之上跑通过。注意：它的 `vbmeta_system` 回滚索引（`1772323200`）低于 11.0.14（`1782864000`），机器记住 11.0.14 之后**刷不回 11.0.13** |
 
+> 这两个底包现在都有**成品包**：一份包通吃两个底包，安装时靠 endor_boot_a 的 md5 自动识别你在哪个底包上。包名里写着「官方11.0.13和11.0.14通用」。
+
 **其它任何底包都没测过**，包括但不限于：别的官方版本、第三方做的移植底包、OTA 之后没清数据的混合状态、以及各种「官方底包 + 别人改过的 vendor」组合。
 
 你要在这些上面试，属于**自测，风险自负**。具体风险：
 
-- **卡刷包会主动拦你**。它内置底包校验（`system ≥ 7000 MB`、`system_ext ≥ 2000 MB`、`product ≥ 900 MB`），不达标直接 abort。这是提醒你底包不对，**不要绕过**——绕过的结果就是「亮 logo 反复重启」。
-- **`vendor_boot` 必须跟着底包版本走**。换个底包就用 `tools/vb_repack.py` 拿**你自己那份** `vendor_boot_a.img` 重新生成一次。用错版本最常见的结果是起不来或触摸失灵。
+- **卡刷包会主动拦你，一共两道闸**。① 三个逻辑分区配额：11.0.14 是 `8275 / 2427 / 1006 MB`，11.0.13 是 `8153 / 2402 / 1041 MB`，对不上直接 abort；② 读当前 `vendor_boot_a` 的 md5，只认官方 11.0.13（`ccea4080…`）与 11.0.14（`5d427b57…`）。两道都不过就 abort —— 这是提醒你底包不对，**不要绕过**，绕过的结果就是「亮 logo 反复重启」。
+- **`vendor_boot` 自动跟着底包走**。包内同时带两份「去 avb」的 `vendor_boot`（11.0.13 → md5 `e75b05fc…`，11.0.14 → md5 `03e9b98a…`），安装时按识别出的底包写对应那份到 a/b 两个槽；检测到已经是去 avb 版就跳过，所以**可以重复刷，幂等**。其它底包请用 `tools/vb_repack.py` 拿**你自己那份** `vendor_boot_a.img` 重新生成。
 - **底包里的 vendor HAL 决定功能完整度**。本移植只在系统的 `system`/`system_ext`/`product` 三个分区上做文章，`vendor`/`odm`/`vendor_dlkm`/`system_dlkm` 以及 boot 链全部沿用底包。底包不同，能用的功能就可能不同。
 - **回滚只能靠自己的官方全分区备份**。没有备份就去试，砖了就是砖了（还有 EDL 兜底，但那也得有正确的整机镜像）。
 
@@ -94,19 +96,25 @@
 所以给的是**可复现路径**，全部在 `tools/` 里：
 
 ```bash
-# 0) 从自己手机的官方固件包里取 vendor_boot_a.img，然后生成「去 avb」版本
-python tools/vb_unpack.py  vendor_boot_a.img ramdisk/          # 看 fstab.qcom 原文
-python tools/vb_repack.py  vendor_boot_a.img vendor_boot_noverity.img
+# 0) 分别用两个底包的 vendor_boot_a.img 各生成一份「去 avb」版本
+python tools/vb_unpack.py  11.0.13/vendor_boot_a.img ramdisk13/   # 看 fstab.qcom 原文
+python tools/vb_repack.py  11.0.13/vendor_boot_a.img vendor_boot_1113.img
+python tools/vb_repack.py  11.0.14/vendor_boot_a.img vendor_boot_1114.img
 #    自动删掉 fstab 中 system/system_ext/product 三条的 avb= 与 avb_keys=
+#    期望 md5：11.0.13 = e75b05fc8b79ec7969e1189ad9e05e50
+#              11.0.14 = 03e9b98ad9328ec8a57a85ddcf799608
 
-# 1) 卡刷包（橙狐/TWRP 内安装，自带官方底包校验）
-python tools/build_cardzip.py
+# 1) 卡刷包（橙狐/TWRP 内安装；自带双底包识别 + 配额校验）
+python tools/build_cardzip.py \
+    --images <三个 system 镜像 + vendor_boot_1113.img + vendor_boot_1114.img> \
+    --vb-1113 <vendor_boot_1113.img> --vb-1114 <vendor_boot_1114.img> \
+    --out LineageOS-23.2-NX789J-cardslot-dual.zip
 
-# 2) EDL 线刷包（不挑底包容量，含 vendor_boot 两槽 + 清 data 头）
+# 2) EDL 线刷包（同样双底包：抽出两份 rawprogram，flash.bat 里选 1 或 2）
 python tools/build_edl_pack.py \
-    --images <三个 system 镜像 + vendor_boot_noverity.img 所在目录> \
+    --images <三个镜像 + 两份 vendor_boot_1113/1114.img 所在目录> \
     --super-head <自己底包的 super 前 512KB> \
-    --out LOS-EDL.zip --zip-store
+    --out LOS-EDL-dual.zip --zip-store
 
 # 3) 刷之前先空跑检查
 powershell -File tools/flash_official_to_los.ps1 -Check
@@ -360,12 +368,14 @@ Verified on RedMagicOS 11 stock base (`nubia/NX789J/NX789J:16/BQ2A.250705.001-BP
 | RedMagicOS **11.0.14** | `nubia/NX789J/NX789J:16/BQ2A.250705.001-BP2A.250605.031.A3/20260813.164726`, vendor patch `2026-06-01`, `ro.vendor.product.ztemodel=NX789S_V2A` | **Verified end-to-end on 2026-10-22**: EDL-flashed OrangeFox, flashed the zip, wiped data, booted. SIM / calls / mobile data / refresh-rate switch / auto-brightness / all 37 sensors / Wi-Fi all working |
 | RedMagicOS **11.0.13** | earlier full-partition backup | Verified earlier. Note its `vbmeta_system` rollback index (`1772323200`) is lower than 11.0.14's (`1782864000`), so once the device has seen 11.0.14 you **cannot** flash back to 11.0.13 |
 
+> Both bases are supported by **one** package: it carries both patched `vendor_boot` variants and picks the right one at install time by hashing your current `vendor_boot_a`.
+
 **Anything else is untested**: other stock versions, third-party port bases, OTA'd-but-not-wiped mixed states, "stock base with somebody else's vendor", etc.
 
 Trying those is **self-support with your own risk**:
 
-- **The flashable zip refuses wrong bases on purpose.** It checks `system ≥ 7000 MB`, `system_ext ≥ 2000 MB`, `product ≥ 900 MB` and aborts otherwise. That abort means your base is wrong — **do not bypass it**; the usual outcome is a bootloop on the logo.
-- **`vendor_boot` must match your base.** Regenerate it from *your own* `vendor_boot_a.img` with `tools/vb_repack.py`. A mismatched `vendor_boot` typically means no boot or dead touch.
+- **The flashable zip refuses wrong bases on purpose — two gates.** ① Logical-partition quotas: `8275 / 2427 / 1006 MB` on 11.0.14 and `8153 / 2402 / 1041 MB` on 11.0.13; ② it hashes your current `vendor_boot_a` and only accepts stock 11.0.13 (`ccea4080…`) or 11.0.14 (`5d427b57…`). Failing either gate aborts — **do not bypass it**; the usual outcome is a bootloop on the logo.
+- **`vendor_boot` follows your base automatically.** The package carries both de-avb variants (11.0.13 → md5 `e75b05fc…`, 11.0.14 → md5 `03e9b98a…`) and writes the matching one to both slots; if it detects the de-avb version is already there it skips, so re-flashing is idempotent. For any other base, regenerate from *your own* `vendor_boot_a.img` with `tools/vb_repack.py`.
 - **The base's vendor HAL decides which features work.** This port only replaces `system` / `system_ext` / `product`; `vendor` / `odm` / `vendor_dlkm` / `system_dlkm` and the whole boot chain stay stock. Different base, different results.
 - **Your own full-partition backup is the only rollback.** No backup, no safety net.
 
@@ -378,18 +388,24 @@ That is a licensing constraint, not laziness. A working package must contain a `
 So you get the reproducible path instead — all of it in `tools/`:
 
 ```bash
-# 0) take vendor_boot_a.img from YOUR stock firmware, then remove the avb checks
-python tools/vb_unpack.py  vendor_boot_a.img ramdisk/          # inspect fstab.qcom
-python tools/vb_repack.py  vendor_boot_a.img vendor_boot_noverity.img
+# 0) build one de-avb vendor_boot per stock base
+python tools/vb_unpack.py  11.0.13/vendor_boot_a.img ramdisk13/   # inspect fstab.qcom
+python tools/vb_repack.py  11.0.13/vendor_boot_a.img vendor_boot_1113.img
+python tools/vb_repack.py  11.0.14/vendor_boot_a.img vendor_boot_1114.img
+#    expected md5: 11.0.13 = e75b05fc8b79ec7969e1189ad9e05e50
+#                  11.0.14 = 03e9b98ad9328ec8a57a85ddcf799608
 
-# 1) recovery-flashable zip (self-checks the base)
-python tools/build_cardzip.py
+# 1) recovery-flashable zip (dual-base detection + quota check)
+python tools/build_cardzip.py \
+    --images <three system images + vendor_boot_1113.img + vendor_boot_1114.img> \
+    --vb-1113 <vendor_boot_1113.img> --vb-1114 <vendor_boot_1114.img> \
+    --out LineageOS-23.2-NX789J-cardslot-dual.zip
 
-# 2) EDL package (base-capacity agnostic; writes vendor_boot to both slots, wipes data heads)
+# 2) EDL package (dual-base too: two rawprograms, flash.bat asks 1 or 2)
 python tools/build_edl_pack.py \
-    --images <dir with the three system images + vendor_boot_noverity.img> \
+    --images <three images + both vendor_boot_1113/1114.img> \
     --super-head <first 512 KB of your own super> \
-    --out LOS-EDL.zip --zip-store
+    --out LOS-EDL-dual.zip --zip-store
 
 # 3) dry-run before flashing
 powershell -File tools/flash_official_to_los.ps1 -Check

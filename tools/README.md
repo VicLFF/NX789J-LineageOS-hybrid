@@ -7,7 +7,7 @@
 | 分组 | 用途 |
 |---|---|
 | 动态分区 | `extract_super.py` 从 `super.img` 抠出整分区；`patch_super.py` 按 extent 写回；`check_fs.py` 报告每个逻辑分区大小与文件系统；`make_edl_los_xml.py` 生成直写 `super` 内逻辑分区的 EDL XML；`sparse2raw.py` sparse → raw |
-| Boot 镜像 | `vb_unpack.py` / `vb_repack.py` 解包重打包 `vendor_boot`（去掉三个分区上 `,avb=vbmeta_system` 校验）；`extract_kernel.py` 从 boot 抽内核；`avb_info.py` 读 AVB 头与描述符；`build_cardzip.py` 做卡刷包（自带官方底包校验）；`build_edl_pack.py` 做 EDL 线刷包（三个镜像 + vendor_boot 两槽 + 清 data 头） |
+| Boot 镜像 | `vb_unpack.py` / `vb_repack.py` 解包重打包 `vendor_boot`（去掉三个分区上 `,avb=vbmeta_system` 校验）；`extract_kernel.py` 从 boot 抽内核；`avb_info.py` 读 AVB 头与描述符；`build_cardzip.py` 做卡刷包、`build_edl_pack.py` 做 EDL 线刷包 —— 两者都支持**双底包**（官方 11.0.13 / 11.0.14）：包里同时带两份去 avb 的 `vendor_boot`，安装时比对当前 `vendor_boot_a` 的 md5 自动选，其它底包直接 abort |
 | EDL | `edl_flash.ps1` 刷三张镜像；`edl_restore_official.ps1` 用 ZTE 官方工具箱（**ZTEToolBox**，作者 **酷安 @某贼**）导出的备份整机恢复（GPT + 全部分区） |
 | 指纹调试 | `fp_try.ps1/.cmd` 自动跑完整录入流程并抓日志；`patch_tsa_in_vendor.py` 是**已证明无效**的 vendor 补丁实验，仅留档；`../fpbridge/` 是那个把中兴指纹状态机推出 IDLE 的小 APK |
 
@@ -48,8 +48,26 @@ drivers.
 | `vb_repack.py` | Repack it — the only change is stripping `,avb=vbmeta_system` / `,avb=v` / `avb_keys=` from `first_stage_ramdisk/fstab.qcom` for `system`, `system_ext`, `product`. |
 | `extract_kernel.py` | Pull the kernel `Image` out of a boot v4 image with **no** ramdisk (this device's `boot.img`). |
 | `avb_info.py` | Read an AVB image (header, algorithm, rollback index, descriptors). Use this instead of hand-rolling — the algorithm field is easy to misread. |
-| `build_cardzip.py` | Build a recovery-flashable zip whose `update-binary` parses the LP metadata *on the device* and writes only the three logical partitions (works on any base layout). |
+| `build_cardzip.py` | Build a recovery-flashable zip whose `update-binary` parses the LP metadata *on the device* and writes only the three logical partitions (works on any base layout). Dual-base: ships both de-avb `vendor_boot` variants and picks one by hashing the device's current `vendor_boot_a`; unknown hashes abort. |
 
+## 双底包（官方 11.0.13 / 11.0.14）
+
+两个打包脚本都默认按「双底包」出包，识别方式不是看版本号字符串，而是**比对 `vendor_boot_a` 的 md5** —— 这个值在两个底包上不同，且用户改不了：
+
+| 底包 | 官方 `vendor_boot_a` md5 | 去 avb 后 md5 |
+|---|---|---|
+| RedMagicOS 11.0.14 | `5d427b57cecc7f32a19e041ee0550bde` | `03e9b98ad9328ec8a57a85ddcf799608` |
+| RedMagicOS 11.0.13 | `ccea408082a8b28b6d402ebf4a972f85` | `e75b05fc8b79ec7969e1189ad9e05e50` |
+
+`update-binary` 的判断逻辑（三条分支）：
+
+1. md5 命中上表左列 → 认出底包，写对应那份去 avb 版到 `vendor_boot_a` 和 `_b` 两个槽；
+2. md5 命中右列 → 已经是去 avb 版，跳过（所以可以重复刷，幂等）；
+3. 其它 md5 → `abort`，提示「只支持官方 11.0.13 / 11.0.14」。
+
+配额校验同时保留：11.0.14 是 `8275 / 2427 / 1006 MB`，11.0.13 是 `8153 / 2402 / 1041 MB`。
+
+EDL 包则是抽出两份 XML（`rawprogram_los_1114.xml` / `rawprogram_los_1113.xml`），唯一差别就是 `vendor_boot` 那两条 `filename`；`flash.bat` 先问你「1) 11.0.14  2) 11.0.13」再刷。
 ## EDL (Windows)
 
 | Script | What it does |
