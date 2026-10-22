@@ -1,0 +1,305 @@
+diff --git a/audioext/Android.bp b/audioext/Android.bp
+new file mode 100644
+index 0000000..bae7361
+--- /dev/null
++++ b/audioext/Android.bp
+@@ -0,0 +1,54 @@
++aidl_interface {
++    name: "qti.audio.core",
++    srcs: [
++        "aidl/qti/audio/core/**/*.aidl",
++    ],
++    local_include_dir: "aidl",
++    stability: "vintf",
++    unstable: false,
++    versions_with_info: [
++        {
++            version: "1",
++            imports: [],
++        },
++    ],
++    backend: {
++        ndk: {
++            enabled: true,
++        },
++        java: {
++            enabled: false,
++        },
++        rust: {
++            enabled: false,
++        },
++        cpp: {
++            enabled: false,
++        },
++    },
++}
++
++cc_binary {
++    name: "hal_adapter_vendor_ext",
++    srcs: [
++        "HalAdapterVendorExt.cpp",
++    ],
++    system_ext_specific: true,
++    init_rc: [
++        "hal_adapter_vendor_ext.rc",
++    ],
++    shared_libs: [
++        "libbase",
++        "libbinder_ndk",
++        "liblog",
++    ],
++    static_libs: [
++        "qti.audio.core-V1-ndk",
++        "android.hardware.audio.core-V4-ndk",
++        "av-audio-types-aidl-ndk",
++    ],
++    cflags: [
++        "-Wall",
++        "-Werror",
++    ],
++}
+diff --git a/audioext/HalAdapterVendorExt.cpp b/audioext/HalAdapterVendorExt.cpp
+new file mode 100644
+index 0000000..de2f1db
+--- /dev/null
++++ b/audioext/HalAdapterVendorExt.cpp
+@@ -0,0 +1,158 @@
++/*
++ * IHalAdapterVendorExtension for the QTI Audio Core HAL on this platform.
++ *
++ * The AudioCore framework adapter parses legacy vendor parameter strings with
++ * the help of this service (see ConversionHelperAidl.cpp
++ * fillVendorParameters()).  Without it every vendor parameter is dropped,
++ * which means IModule::setVendorParameters() is never called and the
++ * telephony voice stream is never started => no audio during calls.
++ *
++ * The QTI HAL extracts each payload as
++ *     extractParameter<aidl::qti::audio::core::VString>(p, &value)
++ * i.e. p.ext holds exactly that parcelable.
++ */
++
++#define LOG_TAG "HalAdapterVendorExt"
++
++#include <android/binder_auto_utils.h>
++#include <android/binder_manager.h>
++#include <android/binder_parcelable_utils.h>
++#include <android/binder_process.h>
++#include <android/binder_status.h>
++#include <log/log.h>
++
++#include <memory>
++#include <string>
++#include <utility>
++#include <vector>
++
++#include <aidl/android/hardware/audio/core/VendorParameter.h>
++#include <aidl/android/media/audio/BnHalAdapterVendorExtension.h>
++#include <aidl/aidl/qti/audio/core/VString.h>
++
++namespace {
++
++using ::aidl::android::hardware::audio::core::VendorParameter;
++using ::aidl::android::media::audio::BnHalAdapterVendorExtension;
++using ::aidl::android::media::audio::IHalAdapterVendorExtension;
++using ::aidl::aidl::qti::audio::core::VString;
++using ::ndk::ScopedAStatus;
++
++constexpr uint32_t kMaxParameter = 64;
++
++// Splits "a;b;c" into {"a", "b", "c"}.
++std::vector<std::string> splitSemicolon(const std::string& raw) {
++    std::vector<std::string> out;
++    size_t start = 0;
++    while (start <= raw.size() && out.size() < kMaxParameter) {
++        size_t end = raw.find(';', start);
++        if (end == std::string::npos) {
++            end = raw.size();
++        }
++        if (end > start) {
++            out.push_back(raw.substr(start, end - start));
++        }
++        if (end == raw.size()) {
++            break;
++        }
++        start = end + 1;
++    }
++    return out;
++}
++
++class HalAdapterVendorExtension : public BnHalAdapterVendorExtension {
++  public:
++    ScopedAStatus parseVendorParameterIds(ParameterScope /*in_scope*/,
++                                          const std::string& in_rawKeys,
++                                          std::vector<std::string>* _aidl_return) override {
++        if (_aidl_return == nullptr) {
++            return ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
++        }
++        *_aidl_return = splitSemicolon(in_rawKeys);
++        return ScopedAStatus::ok();
++    }
++
++    ScopedAStatus parseVendorParameters(ParameterScope /*in_scope*/,
++                                        const std::string& in_rawKeysAndValues,
++                                        std::vector<VendorParameter>* out_syncParameters,
++                                        std::vector<VendorParameter>* out_asyncParameters) override {
++        if (out_syncParameters == nullptr || out_asyncParameters == nullptr) {
++            return ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
++        }
++        out_syncParameters->clear();
++        out_asyncParameters->clear();
++
++        for (const std::string& pair : splitSemicolon(in_rawKeysAndValues)) {
++            const size_t eq = pair.find('=');
++            const std::string id = (eq == std::string::npos) ? pair : pair.substr(0, eq);
++            const std::string value =
++                    (eq == std::string::npos) ? std::string() : pair.substr(eq + 1);
++            if (id.empty()) {
++                continue;
++            }
++            VString payload;
++            payload.value = value;
++            VendorParameter parameter;
++            parameter.id = id;
++            if (parameter.ext.setParcelable(payload) != 0) {
++                ALOGE("%s: failed to set parcel for %s", __func__, id.c_str());
++                continue;
++            }
++            ALOGV("%s: %s=%s", __func__, id.c_str(), value.c_str());
++            out_syncParameters->push_back(std::move(parameter));
++        }
++        return ScopedAStatus::ok();
++    }
++
++    ScopedAStatus parseBluetoothA2dpReconfigureOffload(
++            const std::string& /*in_rawValue*/,
++            std::vector<VendorParameter>* _aidl_return) override {
++        if (_aidl_return == nullptr) {
++            return ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
++        }
++        _aidl_return->clear();
++        return ScopedAStatus::ok();
++    }
++
++    ScopedAStatus parseBluetoothLeReconfigureOffload(
++            const std::string& /*in_rawValue*/,
++            std::vector<VendorParameter>* _aidl_return) override {
++        if (_aidl_return == nullptr) {
++            return ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
++        }
++        _aidl_return->clear();
++        return ScopedAStatus::ok();
++    }
++
++    ScopedAStatus processVendorParameters(ParameterScope /*in_scope*/,
++                                          const std::vector<VendorParameter>& /*in_parameters*/,
++                                          std::string* _aidl_return) override {
++        if (_aidl_return == nullptr) {
++            return ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
++        }
++        _aidl_return->clear();
++        return ScopedAStatus::ok();
++    }
++};
++
++}  // namespace
++
++int main() {
++    ABinderProcess_setThreadPoolMaxThreadCount(2);
++
++    std::shared_ptr<HalAdapterVendorExtension> service =
++            ::ndk::SharedRefBase::make<HalAdapterVendorExtension>();
++    const std::string instance = std::string(IHalAdapterVendorExtension::descriptor) + "/default";
++
++    binder_status_t status =
++            AServiceManager_addService(service->asBinder().get(), instance.c_str());
++    if (status != STATUS_OK) {
++        ALOGE("failed to register %s: %d", instance.c_str(), status);
++        return 1;
++    }
++    ALOGI("registered %s", instance.c_str());
++
++    ABinderProcess_startThreadPool();
++    ABinderProcess_joinThreadPool();
++    return 0;
++}
+diff --git a/audioext/aidl/qti/audio/core/VString.aidl b/audioext/aidl/qti/audio/core/VString.aidl
+new file mode 100644
+index 0000000..f940836
+--- /dev/null
++++ b/audioext/aidl/qti/audio/core/VString.aidl
+@@ -0,0 +1,9 @@
++/*
++ * QTI audio core vendor parcelable, mirrored from vendor.
++ */
++package qti.audio.core;
++
++@VintfStability
++parcelable VString {
++    @utf8InCpp String value;
++}
+diff --git a/audioext/aidl_api/qti.audio.core/1/.hash b/audioext/aidl_api/qti.audio.core/1/.hash
+new file mode 100644
+index 0000000..5c9da4b
+--- /dev/null
++++ b/audioext/aidl_api/qti.audio.core/1/.hash
+@@ -0,0 +1,2 @@
++0f6a714caa3e6bd8cb3b481d4f1f53fdee88acf9
++eb5397baa8edf82c877bfe8c07dede8845eccacb
+diff --git a/audioext/aidl_api/qti.audio.core/1/qti/audio/core/VString.aidl b/audioext/aidl_api/qti.audio.core/1/qti/audio/core/VString.aidl
+new file mode 100644
+index 0000000..f940836
+--- /dev/null
++++ b/audioext/aidl_api/qti.audio.core/1/qti/audio/core/VString.aidl
+@@ -0,0 +1,9 @@
++/*
++ * QTI audio core vendor parcelable, mirrored from vendor.
++ */
++package qti.audio.core;
++
++@VintfStability
++parcelable VString {
++    @utf8InCpp String value;
++}
+diff --git a/audioext/aidl_api/qti.audio.core/current/qti/audio/core/VString.aidl b/audioext/aidl_api/qti.audio.core/current/qti/audio/core/VString.aidl
+new file mode 100644
+index 0000000..7f8ffe7
+--- /dev/null
++++ b/audioext/aidl_api/qti.audio.core/current/qti/audio/core/VString.aidl
+@@ -0,0 +1,26 @@
++/*
++ * QTI audio core vendor parcelable, mirrored from vendor.
++ */
++///////////////////////////////////////////////////////////////////////////////
++// THIS FILE IS IMMUTABLE. DO NOT EDIT IN ANY CASE.                          //
++///////////////////////////////////////////////////////////////////////////////
++
++// This file is a snapshot of an AIDL file. Do not edit it manually. There are
++// two cases:
++// 1). this is a frozen version file - do not edit this in any case.
++// 2). this is a 'current' file. If you make a backwards compatible change to
++//     the interface (from the latest frozen version), the build system will
++//     prompt you to update this file with `m <name>-update-api`.
++//
++// You must not make a backward incompatible change to any AIDL file built
++// with the aidl_interface module type with versions property set. The module
++// type is used to build AIDL files in a way that they can be used across
++// independently updatable components of the system. If a device is shipped
++// with such a backward incompatible change, it has a high risk of breaking
++// later when a module using the interface is updated, e.g., Mainline modules.
++
++package qti.audio.core;
++@VintfStability
++parcelable VString {
++  @utf8InCpp String value;
++}
+diff --git a/audioext/hal_adapter_vendor_ext.rc b/audioext/hal_adapter_vendor_ext.rc
+new file mode 100644
+index 0000000..88ba5c9
+--- /dev/null
++++ b/audioext/hal_adapter_vendor_ext.rc
+@@ -0,0 +1,5 @@
++service hal_adapter_vendor_ext /system_ext/bin/hal_adapter_vendor_ext
++    class core
++    user system
++    group system audio
++    capabilities SYS_NICE

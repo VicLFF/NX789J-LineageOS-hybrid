@@ -1,0 +1,191 @@
+diff --git a/media/libaudiohal/impl/Android.bp b/media/libaudiohal/impl/Android.bp
+index 00f3929..ae1f82f 100644
+--- a/media/libaudiohal/impl/Android.bp
++++ b/media/libaudiohal/impl/Android.bp
+@@ -230,6 +230,9 @@ cc_defaults {
+ 
+ cc_library_shared {
+     name: "libaudiohal@aidl",
++    static_libs: [
++        "qti.audio.core-V1-ndk",
++    ],
+     defaults: [
+         "libaudiohal_aidl_default",
+         "libaudiohal_default",
+diff --git a/media/libaudiohal/impl/ConversionHelperAidl.cpp b/media/libaudiohal/impl/ConversionHelperAidl.cpp
+index 84e0e28..2173593 100644
+--- a/media/libaudiohal/impl/ConversionHelperAidl.cpp
++++ b/media/libaudiohal/impl/ConversionHelperAidl.cpp
+@@ -23,12 +23,54 @@
+ 
+ #include "ConversionHelperAidl.h"
+ 
++#include <aidl/qti/audio/core/VString.h>
++#include <string>
++#include <vector>
++
+ using aidl::android::aidl_utils::statusTFromBinderStatus;
+ using aidl::android::hardware::audio::core::VendorParameter;
+ using aidl::android::media::audio::IHalAdapterVendorExtension;
+ 
+ namespace android {
+ 
++// Splits a ";"-separated list into its non-empty items.
++std::vector<std::string> splitSemicolonListForVendorParams(const char* raw) {
++    std::vector<std::string> out;
++    if (raw == nullptr) return out;
++    const std::string all(raw);
++    size_t start = 0;
++    while (start < all.size()) {
++        size_t end = all.find(';', start);
++        if (end == std::string::npos) end = all.size();
++        if (end > start) out.push_back(all.substr(start, end - start));
++        if (end == all.size()) break;
++        start = end + 1;
++    }
++    return out;
++}
++
++// Used when the vendor does not provide an IHalAdapterVendorExtension
++// implementation. The vendor audio HAL expects each vendor parameter as a
++// VendorParameter whose payload is a qti-style VString, so build them here.
++void fillVendorParametersFallback(const AudioParameter& parameters,
++                                 std::vector<VendorParameter>* syncParameters) {
++    const String8 rawKeysAndValues = parameters.toString();
++    for (const auto& pair : splitSemicolonListForVendorParams(rawKeysAndValues.c_str())) {
++        const size_t eq = pair.find('=');
++        if (eq == std::string::npos || eq == 0) continue;
++        ::aidl::qti::audio::core::VString payload;
++        payload.value = pair.substr(eq + 1);
++        VendorParameter parameter;
++        parameter.id = pair.substr(0, eq);
++        parameter.ext.setParcelable(payload);
++        syncParameters->push_back(std::move(parameter));
++    }
++    ALOGW("vendor fallback (ConversionHelper) built %d parameters",
++          static_cast<int>(syncParameters->size()));
++}
++
++
++
+ status_t reparseVendorParameters(const std::string& vendorParameters, String8* values) {
+     // Re-parse the vendor-provided string to ensure that it is correct.
+     AudioParameter reparse(String8(vendorParameters.c_str()));
+@@ -48,6 +90,10 @@ status_t fillVendorParameterIds(std::shared_ptr<IHalAdapterVendorExtension> vend
+     if (parameterKeys.size() == 0) return OK;
+     const String8 rawKeys = parameterKeys.keysToString();
+     assert(vendorParametersIds.size() == 0);
++    if (vendorExt == nullptr) {
++        vendorParametersIds = splitSemicolonListForVendorParams(rawKeys.c_str());
++        return OK;
++    }
+     RETURN_STATUS_IF_ERROR(statusTFromBinderStatus(vendorExt->parseVendorParameterIds(
+             scope, std::string(rawKeys.c_str()), &vendorParametersIds)));
+     return OK;
+@@ -77,8 +123,20 @@ status_t fillVendorParameters(std::shared_ptr<IHalAdapterVendorExtension> vendor
+     assert(syncParameters.empty() && asyncParameters.empty());
+ 
+     const String8 rawKeysAndValues = parameters.toString();
+-    RETURN_STATUS_IF_ERROR(statusTFromBinderStatus(vendorExt->parseVendorParameters(
+-            scope, std::string(rawKeysAndValues.c_str()), &syncParameters, &asyncParameters)));
++    if (vendorExt != nullptr) {
++        const status_t vendorStatus = statusTFromBinderStatus(vendorExt->parseVendorParameters(
++                scope, std::string(rawKeysAndValues.c_str()), &syncParameters,
++                &asyncParameters));
++        if (vendorStatus == OK && !syncParameters.empty()) {
++            return OK;
++        }
++        // The vendor extension either failed or is not implemented: the wrapper
++        // returns OK with empty output when no service is registered. Hand the
++        // raw key/value pairs to the HAL ourselves.
++        syncParameters.clear();
++        asyncParameters.clear();
++    }
++    fillVendorParametersFallback(parameters, &syncParameters);
+     return OK;
+ }
+ 
+diff --git a/media/libaudiohal/impl/DeviceHalAidl.cpp b/media/libaudiohal/impl/DeviceHalAidl.cpp
+index 8f614ca..c69169f 100644
+--- a/media/libaudiohal/impl/DeviceHalAidl.cpp
++++ b/media/libaudiohal/impl/DeviceHalAidl.cpp
+@@ -38,6 +38,10 @@
+ 
+ #include "AidlUtils.h"
+ #include "DeviceHalAidl.h"
++
++#include <aidl/qti/audio/core/VString.h>
++#include <string>
++#include <vector>
+ #include "EffectHalAidl.h"
+ #include "StreamHalAidl.h"
+ 
+@@ -93,6 +97,23 @@ using aidl::android::hardware::audio::core::VendorParameter;
+ 
+ namespace android {
+ 
++// Splits a ";"-separated list into its non-empty items.
++static std::vector<std::string> splitKeyValuePairsForVendorExt(const char* raw) {
++    std::vector<std::string> out;
++    if (raw == nullptr) return out;
++    const std::string all(raw);
++    size_t start = 0;
++    while (start < all.size()) {
++        size_t end = all.find(';', start);
++        if (end == std::string::npos) end = all.size();
++        if (end > start) out.push_back(all.substr(start, end - start));
++        if (end == all.size()) break;
++        start = end + 1;
++    }
++    return out;
++}
++
++
+ namespace {
+ 
+ enum AidlVersion : int32_t {
+@@ -302,6 +323,27 @@ status_t DeviceHalAidl::setParameters(const String8& kvPairs) {
+     RETURN_IF_MODULE_NOT_INIT(NO_INIT);
+     AudioParameter parameters(kvPairs);
+     AUGMENT_LOG(D, "parameters: \"%s\"", parameters.toString().c_str());
++    if (mVendorExt == nullptr) {
++        std::vector<VendorParameter> vendorParameters;
++        for (const auto& pair : splitKeyValuePairsForVendorExt(kvPairs.c_str())) {
++            const size_t eq = pair.find('=');
++            if (eq == std::string::npos || eq == 0) continue;
++            ::aidl::qti::audio::core::VString payload;
++            payload.value = pair.substr(eq + 1);
++            VendorParameter parameter;
++            parameter.id = pair.substr(0, eq);
++            parameter.ext.setParcelable(payload);
++            vendorParameters.push_back(std::move(parameter));
++        }
++        AUGMENT_LOG(D, "vendor fallback: built %d vendor parameters",
++                    static_cast<int>(vendorParameters.size()));
++        if (!vendorParameters.empty()) {
++            std::lock_guard l(mLock);
++            return statusTFromBinderStatus(
++                    mModule->setVendorParameters(vendorParameters, false /*async*/));
++        }
++        return OK;
++    }
+ 
+     if (status_t status = filterAndUpdateBtA2dpParameters(parameters); status != OK) {
+         AUGMENT_LOG(W, "filterAndUpdateBtA2dpParameters failed: %d", status);
+@@ -405,9 +447,13 @@ status_t DeviceHalAidl::parseAndSetVendorParameters(const AudioParameter& parame
+                                                 IHalAdapterVendorExtension::ParameterScope::MODULE,
+                                                 parameters, syncParameters, asyncParameters));
+     std::lock_guard l(mLock);
+-    if (!syncParameters.empty())
+-        RETURN_STATUS_IF_ERROR(statusTFromBinderStatus(
+-                mModule->setVendorParameters(syncParameters, false /*async*/)));
++    if (!syncParameters.empty()) {
++        const status_t setStatus = statusTFromBinderStatus(
++                mModule->setVendorParameters(syncParameters, false /*async*/));
++        AUGMENT_LOG(E, "setVendorParameters sync=%d status=%d",
++                    static_cast<int>(syncParameters.size()), static_cast<int>(setStatus));
++        RETURN_STATUS_IF_ERROR(setStatus);
++    }
+     if (!asyncParameters.empty())
+         RETURN_STATUS_IF_ERROR(statusTFromBinderStatus(
+                 mModule->setVendorParameters(asyncParameters, true /*async*/)));

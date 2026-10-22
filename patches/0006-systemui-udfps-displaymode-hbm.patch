@@ -1,0 +1,45 @@
+diff --git a/packages/SystemUI/src/com/android/systemui/biometrics/UdfpsDisplayMode.kt b/packages/SystemUI/src/com/android/systemui/biometrics/UdfpsDisplayMode.kt
+index 670a8e638..bbe8458f5 100644
+--- a/packages/SystemUI/src/com/android/systemui/biometrics/UdfpsDisplayMode.kt
++++ b/packages/SystemUI/src/com/android/systemui/biometrics/UdfpsDisplayMode.kt
+@@ -22,6 +22,7 @@ import android.os.Trace
+ import com.android.systemui.util.concurrency.Execution
+ 
+ private const val TAG = "UdfpsDisplayMode"
++private const val HBM_PATH = "/proc/driver/lcd_hbm"
+ 
+ /**
+  * UdfpsDisplayMode configures the display for optimal UDFPS operation. For example, sets the
+@@ -35,12 +36,24 @@ constructor(
+     private val logger: UdfpsLogger
+ ) : UdfpsDisplayModeProvider {
+ 
++
++    /** 打开/关闭屏下指纹照明用的 HBM（与 ZTE 原厂 UdfpsMessageService 一致）。 */
++    private fun writeHbm(value: String) {
++        try {
++            java.io.FileOutputStream(HBM_PATH).use { it.write(value.toByteArray()) }
++            logger.v(TAG, "writeHbm | $HBM_PATH <= $value")
++        } catch (e: Exception) {
++            logger.w(TAG, "writeHbm | $HBM_PATH <= $value failed: $e")
++        }
++    }
++
+     // The request is reset to null after it's processed.
+     private var currentRequest: Request? = null
+ 
+     override fun enable(onEnabled: Runnable?) {
+         execution.isMainThread()
+         logger.v(TAG, "enable")
++        writeHbm("1")
+ 
+         if (currentRequest != null) {
+             logger.e(TAG, "enable | already requested")
+@@ -73,6 +86,7 @@ constructor(
+     override fun disable(onDisabled: Runnable?) {
+         execution.isMainThread()
+         logger.v(TAG, "disable")
++        writeHbm("0")
+ 
+         val request = currentRequest
+         if (request == null) {

@@ -1,0 +1,32 @@
+diff --git a/prebuilts/usr/idc/uinput-goodix.idc b/prebuilts/usr/idc/uinput-goodix.idc
+new file mode 100644
+index 0000000..8c3d6b2
+--- /dev/null
++++ b/prebuilts/usr/idc/uinput-goodix.idc
+@@ -0,0 +1,5 @@
++# Goodix 屏下指纹的 uinput 设备配置（取自官方底包 /system/usr/idc/uinput-goodix.idc）
++device.internal = 1
++keyboard.layout = uinput-goodix
++keyboard.builtIn = 1
++keyboard.orientationAware = 1
+diff --git a/prebuilts/usr/keylayout/uinput-goodix.kl b/prebuilts/usr/keylayout/uinput-goodix.kl
+new file mode 100644
+index 0000000..b2fa706
+--- /dev/null
++++ b/prebuilts/usr/keylayout/uinput-goodix.kl
+@@ -0,0 +1,4 @@
++# Goodix 屏下指纹的按键映射（取自官方底包 /system/usr/keylayout/uinput-goodix.kl）
++key  353    DPAD_CENTER  VIRTUAL
++key  306    BUTTON_C     VIRTUAL
++key  102    DPAD_CENTER  VIRTUAL
+diff --git a/sepolicy/seapp_contexts b/sepolicy/seapp_contexts
+new file mode 100644
+index 0000000..9d8ff49
+--- /dev/null
++++ b/sepolicy/seapp_contexts
+@@ -0,0 +1,5 @@
++# 高通 IMS 应用的 seapp 映射不用自己写：
++# device/qcom/sepolicy_vndr 已经提供
++#   org.codeaurora.ims isPrivApp=true domain=vendor_qtelephony
++#   com.qti.phone               domain=vendor_qtelephony
++# 自己再加一条会因为「所有输入相同」被 checkseapp 判为重复行而编译失败。

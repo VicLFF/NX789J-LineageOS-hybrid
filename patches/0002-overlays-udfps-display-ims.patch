@@ -1,0 +1,52 @@
+diff --git a/overlay/frameworks/base/core/res/res/values/config.xml b/overlay/frameworks/base/core/res/res/values/config.xml
+new file mode 100644
+index 0000000..d61e984
+--- /dev/null
++++ b/overlay/frameworks/base/core/res/res/values/config.xml
+@@ -0,0 +1,13 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <!-- NX789J 屏下指纹（UDFPS）几何参数，单位 px（面板 1216x2688）
++         数值取自 vendor 属性 ro.vendor.feature.fingerprint_sensorui_position_center_{x,y,r}
++         （608 / 2024 / 94）；存在性即代表该设备是 UDFPS，见 AuthService.java:1085 -->
++    <integer-array name="config_udfps_sensor_props" translatable="false">
++        <item>608</item>
++        <item>2024</item>
++        <item>94</item>
++    </integer-array>
++    <!-- 自动亮度：AutoBrightnessPreferenceController 要求该 bool 为 true 才显示该项 -->
++    <bool name="config_automatic_brightness_available">true</bool>
++</resources>
+\ No newline at end of file
+diff --git a/overlay/packages/apps/Settings/res/values/config.xml b/overlay/packages/apps/Settings/res/values/config.xml
+new file mode 100644
+index 0000000..5230d4f
+--- /dev/null
++++ b/overlay/packages/apps/Settings/res/values/config.xml
+@@ -0,0 +1,10 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <!-- 打开「顺畅显示 / 峰值刷新率」开关。
++         面板支持 60/90/120/144，PeakRefreshRatePreferenceController
++         在 config_show_smooth_display=true 且 peak(144) > 60 时才显示该项 -->
++    <bool name="config_show_smooth_display">true</bool>
++    <!-- 打开「最高刷新率」列表（max_refresh_rate），
++         PeakRefreshRateListPreferenceController 只检查这个标志 -->
++    <bool name="config_show_peak_refresh_rate_switch">true</bool>
++</resources>
+\ No newline at end of file
+diff --git a/overlay/packages/services/Telephony/res/values/config.xml b/overlay/packages/services/Telephony/res/values/config.xml
+new file mode 100644
+index 0000000..b2fefa9
+--- /dev/null
++++ b/overlay/packages/services/Telephony/res/values/config.xml
+@@ -0,0 +1,9 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- 官方底包的 IMS 实现是 org.codeaurora.ims（高通 IMS），
++     AOSP/LineageOS 默认 config_ims_mmtel_package 为空，导致
++     PhoneGlobals 不把任何包交给 ImsResolver，表现为
++     "registration failed, no ImsService available"。 -->
++<resources>
++    <string name="config_ims_mmtel_package" translatable="false">org.codeaurora.ims</string>
++    <string name="config_ims_rcs_package" translatable="false">vendor.qti.imsrcs</string>
++</resources>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.nx.fpb" android:versionCode="1" android:versionName="1.0">
+    <uses-sdk android:minSdkVersion="30" android:targetSdkVersion="36"/>
+    <application android:label="fpb">
+        <activity android:name=".Main" android:exported="true" android:theme="@android:style/Theme.Translucent.NoTitleBar"/>
+    </application>
+</manifest>

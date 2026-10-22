@@ -1,0 +1,223 @@
+diff --git a/Android.bp b/Android.bp
+new file mode 100644
+index 0000000..d856811
+--- /dev/null
++++ b/Android.bp
+@@ -0,0 +1,108 @@
++// 高通 IMS 应用（取自官方底包 system_ext，已用 platform key 重签）
++// 用 android_app_import 而不是 PRODUCT_COPY_FILES —— 后者禁止复制 apk。
++
++android_app_import {
++    name: "ims",
++    apk: "prebuilts/ims/system_ext/priv-app/ims/ims.apk",
++    presigned: true,
++    preprocessed: true,
++    system_ext_specific: true,
++    privileged: true,
++    dex_preopt: { enabled: false },
++}
++
++android_app_import {
++    name: "QtiTelephony",
++    apk: "prebuilts/ims/system_ext/priv-app/QtiTelephony/QtiTelephony.apk",
++    presigned: true,
++    preprocessed: true,
++    system_ext_specific: true,
++    privileged: true,
++    dex_preopt: { enabled: false },
++}
++
++android_app_import {
++    name: "qcrilmsgtunnel",
++    apk: "prebuilts/ims/system_ext/priv-app/qcrilmsgtunnel/qcrilmsgtunnel.apk",
++    presigned: true,
++    preprocessed: true,
++    system_ext_specific: true,
++    privileged: true,
++    dex_preopt: { enabled: false },
++}
++
++android_app_import {
++    name: "QtiTelephonyService",
++    apk: "prebuilts/ims/system_ext/app/QtiTelephonyService/QtiTelephonyService.apk",
++    presigned: true,
++    preprocessed: true,
++    system_ext_specific: true,
++    dex_preopt: { enabled: false },
++}
++
++android_app_import {
++    name: "ImsRcsService",
++    apk: "prebuilts/ims/system_ext/app/ImsRcsService/ImsRcsService.apk",
++    presigned: true,
++    preprocessed: true,
++    system_ext_specific: true,
++    dex_preopt: { enabled: false },
++}
++
++android_app_import {
++    name: "ImsDataChannelService",
++    apk: "prebuilts/ims/system_ext/app/ImsDataChannelService/ImsDataChannelService.apk",
++    presigned: true,
++    preprocessed: true,
++    system_ext_specific: true,
++    dex_preopt: { enabled: false },
++}
++
++android_app_import {
++    name: "imssettings",
++    apk: "prebuilts/ims/system_ext/app/imssettings/imssettings.apk",
++    presigned: true,
++    preprocessed: true,
++    system_ext_specific: true,
++    dex_preopt: { enabled: false },
++}
++
++android_app_import {
++    name: "uceShimService",
++    apk: "prebuilts/ims/system_ext/app/uceShimService/uceShimService.apk",
++    presigned: true,
++    preprocessed: true,
++    system_ext_specific: true,
++    dex_preopt: { enabled: false },
++}
++
++// --- ZTE 原厂屏下指纹配套应用（自官方 RedMagicOS system 镜像提取） ---
++android_app_import {
++    name: "FingerprintSensorUi_ZTE",
++    apk: "prebuilts/fp/apk/FingerprintSensorUi_ZTE.apk",
++    privileged: true,
++    certificate: "platform",
++    dex_preopt: {
++        enabled: false,
++    },
++}
++
++android_app_import {
++    name: "FingerprintService_ZTE",
++    apk: "prebuilts/fp/apk/FingerprintService_ZTE.apk",
++    privileged: true,
++    certificate: "platform",
++    dex_preopt: {
++        enabled: false,
++    },
++}
++
++android_app_import {
++    name: "FingerPrintSettings_ZTE",
++    apk: "prebuilts/fp/apk/FingerPrintSettings_ZTE.apk",
++    privileged: true,
++    certificate: "platform",
++    dex_preopt: {
++        enabled: false,
++    },
++}
+\ No newline at end of file
+diff --git a/BoardConfig.mk b/BoardConfig.mk
+index 7428346..3d5446b 100644
+--- a/BoardConfig.mk
++++ b/BoardConfig.mk
+@@ -150,3 +150,9 @@ WIFI_HIDL_FEATURE_AWARE := true
+ WIFI_HIDL_FEATURE_DUAL_INTERFACE := true
+ WIFI_HIDL_UNIFIED_SUPPLICANT_SERVICE_RC_ENTRY := true
+ WPA_SUPPLICANT_VERSION := VER_0_8_X
++
++# IMS/QTI sepolicy
++SYSTEM_EXT_PRIVATE_SEPOLICY_DIRS += $(DEVICE_PATH)/sepolicy
++
++# 允许 PRODUCT_COPY_FILES 复制厂商预编译 .so（高通 IMS 的 jni 库）
++BUILD_BROKEN_ELF_PREBUILT_PRODUCT_COPY_FILES := true
+diff --git a/device.mk b/device.mk
+index 360c15f..7746cac 100644
+--- a/device.mk
++++ b/device.mk
+@@ -49,3 +49,75 @@ PRODUCT_SOONG_NAMESPACES += \
+     hardware/qcom-caf/wlan \
+     hardware/qcom-caf/wlan/qcwcn \
+     $(LOCAL_PATH)
++
++# --- 高通 IMS（取自官方底包 system_ext，已用 platform key 重签，用于 VoLTE/VoNR）---
++IMS_PREBUILTS := $(LOCAL_PATH)/prebuilts/ims
++PRODUCT_PACKAGES += \
++    ims \
++    QtiTelephony \
++    qcrilmsgtunnel \
++    QtiTelephonyService \
++    ImsRcsService \
++    ImsDataChannelService \
++    imssettings \
++    uceShimService
++
++PRODUCT_COPY_FILES += \
++    $(IMS_PREBUILTS)/system_ext/etc/permissions/android.hardware.telephony.ims.xml:system_ext/etc/permissions/android.hardware.telephony.ims.xml \
++    $(IMS_PREBUILTS)/system_ext/etc/permissions/com.qualcomm.qti.imscmservice-V2.0-java.xml:system_ext/etc/permissions/com.qualcomm.qti.imscmservice-V2.0-java.xml \
++    $(IMS_PREBUILTS)/system_ext/etc/permissions/com.qualcomm.qti.imscmservice-V2.1-java.xml:system_ext/etc/permissions/com.qualcomm.qti.imscmservice-V2.1-java.xml \
++    $(IMS_PREBUILTS)/system_ext/etc/permissions/com.qualcomm.qti.imscmservice-V2.2-java.xml:system_ext/etc/permissions/com.qualcomm.qti.imscmservice-V2.2-java.xml \
++    $(IMS_PREBUILTS)/system_ext/etc/permissions/telephony_system-ext_privapp-permissions-qti.xml:system_ext/etc/permissions/telephony_system-ext_privapp-permissions-qti.xml \
++    $(IMS_PREBUILTS)/system_ext/etc/permissions/vendor.qti.imsdatachannel.xml:system_ext/etc/permissions/vendor.qti.imsdatachannel.xml \
++    $(IMS_PREBUILTS)/system_ext/etc/sysconfig/qti_telephony_system_packages_config.xml:system_ext/etc/sysconfig/qti_telephony_system_packages_config.xml \
++    $(IMS_PREBUILTS)/system_ext/lib64/libimscamera_jni.so:system_ext/lib64/libimscamera_jni.so \
++    $(IMS_PREBUILTS)/system_ext/lib64/libimsmedia_jni.so:system_ext/lib64/libimsmedia_jni.so
++
++
++# --- QTI IMS：源码模块（vendor/codeaurora/telephony） ---
++PRODUCT_PACKAGES += \
++    qti-telephony-utils \
++    qti_telephony_utils.xml \
++    qti-telephony-hidl-wrapper \
++    qti_telephony_hidl_wrapper.xml \
++    extphonelib \
++    extphonelib.xml \
++    ims-ext-common \
++    ims_ext_common.xml
++
++# --- QTI IMS：预编译 jar / 权限 xml（官方底包提取） ---
++PRODUCT_COPY_FILES += \
++    $(LOCAL_PATH)/prebuilts/ims/system_ext/framework/qcrilhook.jar:$(TARGET_COPY_OUT_SYSTEM_EXT)/framework/qcrilhook.jar \
++    $(LOCAL_PATH)/prebuilts/ims/system_ext/framework/vendor.qti.ims.connection-V1.0-java.jar:$(TARGET_COPY_OUT_SYSTEM_EXT)/framework/vendor.qti.ims.connection-V1.0-java.jar \
++    $(LOCAL_PATH)/prebuilts/ims/system_ext/framework/vendor.qti.ims.factory-V2.2-java.jar:$(TARGET_COPY_OUT_SYSTEM_EXT)/framework/vendor.qti.ims.factory-V2.2-java.jar \
++    $(LOCAL_PATH)/prebuilts/ims/system_ext/framework/vendor.qti.ims.rcsuce-V1.2-java.jar:$(TARGET_COPY_OUT_SYSTEM_EXT)/framework/vendor.qti.ims.rcsuce-V1.2-java.jar \
++    $(LOCAL_PATH)/prebuilts/ims/system_ext/framework/vendor.qti.ims.rcssip-V1.2-java.jar:$(TARGET_COPY_OUT_SYSTEM_EXT)/framework/vendor.qti.ims.rcssip-V1.2-java.jar \
++    $(LOCAL_PATH)/prebuilts/ims/system_ext/framework/vendor.qti.ims.factoryaidlservice-V1-java.jar:$(TARGET_COPY_OUT_SYSTEM_EXT)/framework/vendor.qti.ims.factoryaidlservice-V1-java.jar \
++    $(LOCAL_PATH)/prebuilts/ims/system_ext/framework/vendor.qti.ims.rcssipaidlservice-V1-java.jar:$(TARGET_COPY_OUT_SYSTEM_EXT)/framework/vendor.qti.ims.rcssipaidlservice-V1-java.jar \
++    $(LOCAL_PATH)/prebuilts/ims/system_ext/framework/vendor.qti.ims.rcsuceaidlservice-V1-java.jar:$(TARGET_COPY_OUT_SYSTEM_EXT)/framework/vendor.qti.ims.rcsuceaidlservice-V1-java.jar \
++    $(LOCAL_PATH)/prebuilts/ims/system_ext/framework/vendor.qti.ims.connectionaidlservice-V1-java.jar:$(TARGET_COPY_OUT_SYSTEM_EXT)/framework/vendor.qti.ims.connectionaidlservice-V1-java.jar \
++    $(LOCAL_PATH)/prebuilts/ims/system_ext/framework/vendor.qti.ims.datachannelservice-V3-java.jar:$(TARGET_COPY_OUT_SYSTEM_EXT)/framework/vendor.qti.ims.datachannelservice-V3-java.jar \
++    $(LOCAL_PATH)/prebuilts/ims/system_ext/framework/vendor.qti.ims.uceaidlservice-V1-java.jar:$(TARGET_COPY_OUT_SYSTEM_EXT)/framework/vendor.qti.ims.uceaidlservice-V1-java.jar \
++    $(LOCAL_PATH)/prebuilts/ims/system_ext/framework/com.qualcomm.qti.uceservice-V2.0-java.jar:$(TARGET_COPY_OUT_SYSTEM_EXT)/framework/com.qualcomm.qti.uceservice-V2.0-java.jar \
++    $(LOCAL_PATH)/prebuilts/ims/system_ext/framework/com.qualcomm.qti.uceservice-V2.1-java.jar:$(TARGET_COPY_OUT_SYSTEM_EXT)/framework/com.qualcomm.qti.uceservice-V2.1-java.jar \
++    $(LOCAL_PATH)/prebuilts/ims/system_ext/framework/com.qualcomm.qti.uceservice-V2.2-java.jar:$(TARGET_COPY_OUT_SYSTEM_EXT)/framework/com.qualcomm.qti.uceservice-V2.2-java.jar \
++    $(LOCAL_PATH)/prebuilts/ims/system_ext/framework/com.qualcomm.qti.uceservice-V2.3-java.jar:$(TARGET_COPY_OUT_SYSTEM_EXT)/framework/com.qualcomm.qti.uceservice-V2.3-java.jar \
++    $(LOCAL_PATH)/prebuilts/ims/system_ext/etc/permissions/qcrilhook.xml:$(TARGET_COPY_OUT_SYSTEM_EXT)/etc/permissions/qcrilhook.xml \
++    $(LOCAL_PATH)/prebuilts/ims/system_ext/etc/permissions/vendor.qti.ims.rcsservice.xml:$(TARGET_COPY_OUT_SYSTEM_EXT)/etc/permissions/vendor.qti.ims.rcsservice.xml
++
++# --- 屏下指纹 uinput 设备配置（取自官方底包 /system/usr） ---
++PRODUCT_COPY_FILES += \
++    $(LOCAL_PATH)/prebuilts/usr/idc/uinput-goodix.idc:$(TARGET_COPY_OUT_SYSTEM)/usr/idc/uinput-goodix.idc \
++    $(LOCAL_PATH)/prebuilts/usr/keylayout/uinput-goodix.kl:$(TARGET_COPY_OUT_SYSTEM)/usr/keylayout/uinput-goodix.kl
++
++# --- ZTE 原厂屏下指纹配套应用（FingerprintSensorUi_ZTE / FingerprintService_ZTE / FingerPrintSettings_ZTE） ---
++PRODUCT_PACKAGES += \
++    FingerprintSensorUi_ZTE \
++    FingerprintService_ZTE \
++    FingerPrintSettings_ZTE
++
++PRODUCT_COPY_FILES += \
++    $(LOCAL_PATH)/prebuilts/fp/permissions/privapp_whitelist_com.fingerprint.sensorservice.xml:$(TARGET_COPY_OUT_SYSTEM)/etc/permissions/privapp_whitelist_com.fingerprint.sensorservice.xml \
++    $(LOCAL_PATH)/prebuilts/fp/permissions/privapp_whitelist_com.ztefingerprint.service.xml:$(TARGET_COPY_OUT_SYSTEM)/etc/permissions/privapp_whitelist_com.ztefingerprint.service.xml \
++    $(LOCAL_PATH)/prebuilts/fp/permissions/privapp_whitelist_com.zte.fingerprints.xml:$(TARGET_COPY_OUT_SYSTEM)/etc/permissions/privapp_whitelist_com.zte.fingerprints.xml
++# --- Audio HAL adapter vendor extension (telephony parameters) ---
+diff --git a/system.prop b/system.prop
+index 2d21d67..1a87a2b 100644
+--- a/system.prop
++++ b/system.prop
+@@ -1,2 +1,9 @@
+ # RedMagic 10 Pro (NX789J) system props — bootstrap
+ ro.zygote=zygote64
++ro.control_privapp_permissions=log
++
++# VoLTE / VoNR 强制可用（carrier config 里 volte_available 是 false）
++persist.dbg.volte_avail_ovr=1
++persist.dbg.vt_avail_ovr=1
++
++# Enable the Audio HAL adapter vendor extension service (telephony params)
