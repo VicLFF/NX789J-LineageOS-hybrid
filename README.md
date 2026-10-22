@@ -50,6 +50,55 @@
 
 ---
 
+## 测试范围（重要，先看这个）
+
+**本移植只在下面两个官方底包上真机跑通过，其它一律没验证过。**
+
+| 底包 | 版本标识 | 实测结论 |
+|---|---|---|
+| RedMagicOS **11.0.14** | `nubia/NX789J/NX789J:16/BQ2A.250705.001-BP2A.250605.031.A3/20260813.164726`，vendor 安全补丁 `2026-06-01`，`ro.vendor.product.ztemodel=NX789S_V2A` | **2026-10-22 全流程实测通过**：EDL 刷 OrangeFox → 卡刷 → 清 data → 开机。SIM/通话/移动数据/刷新率/自动亮度/37 个传感器/Wi-Fi 全部正常 |
+| RedMagicOS **11.0.13** | 早前的官方全分区备份 | 更早的版本在它之上跑通过。注意：它的 `vbmeta_system` 回滚索引（`1772323200`）低于 11.0.14（`1782864000`），机器记住 11.0.14 之后**刷不回 11.0.13** |
+
+**其它任何底包都没测过**，包括但不限于：别的官方版本、第三方做的移植底包、OTA 之后没清数据的混合状态、以及各种「官方底包 + 别人改过的 vendor」组合。
+
+你要在这些上面试，属于**自测，风险自负**。具体风险：
+
+- **卡刷包会主动拦你**。它内置底包校验（`system ≥ 7000 MB`、`system_ext ≥ 2000 MB`、`product ≥ 900 MB`），不达标直接 abort。这是提醒你底包不对，**不要绕过**——绕过的结果就是「亮 logo 反复重启」。
+- **`vendor_boot` 必须跟着底包版本走**。换个底包就用 `tools/vb_repack.py` 拿**你自己那份** `vendor_boot_a.img` 重新生成一次。用错版本最常见的结果是起不来或触摸失灵。
+- **底包里的 vendor HAL 决定功能完整度**。本移植只在系统的 `system`/`system_ext`/`product` 三个分区上做文章，`vendor`/`odm`/`vendor_dlkm`/`system_dlkm` 以及 boot 链全部沿用底包。底包不同，能用的功能就可能不同。
+- **回滚只能靠自己的官方全分区备份**。没有备份就去试，砖了就是砖了（还有 EDL 兜底，但那也得有正确的整机镜像）。
+
+## 关于「现成的刷机包」
+
+**本仓库只放脚本、补丁和文档，不放任何现成镜像。**
+
+不是偷懒，是不能放：可用的刷机包里必须带一份改过 `first_stage_ramdisk/fstab.qcom` 的 `vendor_boot`，那是中兴的厂商二进制；`system` 镜像里也还带着从官方固件提取的高通 IMS 应用和 ZTE 指纹应用。把这些发出来等于分发厂商固件，与本仓库「只含自有成果」的定位冲突。
+
+所以给的是**可复现路径**，全部在 `tools/` 里：
+
+```bash
+# 0) 从自己手机的官方固件包里取 vendor_boot_a.img，然后生成「去 avb」版本
+python tools/vb_unpack.py  vendor_boot_a.img ramdisk/          # 看 fstab.qcom 原文
+python tools/vb_repack.py  vendor_boot_a.img vendor_boot_noverity.img
+#    自动删掉 fstab 中 system/system_ext/product 三条的 avb= 与 avb_keys=
+
+# 1) 卡刷包（橙狐/TWRP 内安装，自带官方底包校验）
+python tools/build_cardzip.py
+
+# 2) EDL 线刷包（不挑底包容量，含 vendor_boot 两槽 + 清 data 头）
+python tools/build_edl_pack.py \
+    --images <三个 system 镜像 + vendor_boot_noverity.img 所在目录> \
+    --super-head <自己底包的 super 前 512KB> \
+    --out LOS-EDL.zip --zip-store
+
+# 3) 刷之前先空跑检查
+powershell -File tools/flash_official_to_los.ps1 -Check
+```
+
+补充：`tools/build_edl_pack.py` 里的 `vendor_boot_a/b`、`userdata`、`metadata` 偏移是 NX789J 的 GPT 常量；`system/system_ext/product` 的偏移每次都从你给的 super 头现算，所以换底包不用改脚本。
+
+完整流程见 [`docs/17-从底包刷入LineageOS.md`](docs/17-从底包刷入LineageOS.md)。
+
 ## 原理（为什么只能这么做）
 
 vendor 分区里带着约 280 个内核模块和 HAL，全部是按内核 `6.6.92-android15` 编译的。重编内核技术上可行，但随后必须把每一个 vendor 模块同批重编（vermagic / CRC / CFI 都要对上），那已经不是「device tree 移植」的量级。所以本移植**不碰**：
@@ -267,6 +316,54 @@ E [gdix_tsa][UpdateFrameMissingFlag]: Missing frame, curFrameIdx(N+1), lastFrame
 | ⚠️ | Bypass / "charge separation" power mode | untested |
 
 Verified on RedMagicOS 11 stock base (`nubia/NX789J/NX789J:16/BQ2A.250705.001-BP2A.250605.031.A3`, vendor `:15`, vendor security patch `2026-05-01`), bootloader unlocked.
+
+## Tested configurations (read this first)
+
+**This port has only been verified on the two stock bases below. Everything else is untested.**
+
+| Base | Build identifier | Result |
+|---|---|---|
+| RedMagicOS **11.0.14** | `nubia/NX789J/NX789J:16/BQ2A.250705.001-BP2A.250605.031.A3/20260813.164726`, vendor patch `2026-06-01`, `ro.vendor.product.ztemodel=NX789S_V2A` | **Verified end-to-end on 2026-10-22**: EDL-flashed OrangeFox, flashed the zip, wiped data, booted. SIM / calls / mobile data / refresh-rate switch / auto-brightness / all 37 sensors / Wi-Fi all working |
+| RedMagicOS **11.0.13** | earlier full-partition backup | Verified earlier. Note its `vbmeta_system` rollback index (`1772323200`) is lower than 11.0.14's (`1782864000`), so once the device has seen 11.0.14 you **cannot** flash back to 11.0.13 |
+
+**Anything else is untested**: other stock versions, third-party port bases, OTA'd-but-not-wiped mixed states, "stock base with somebody else's vendor", etc.
+
+Trying those is **self-support with your own risk**:
+
+- **The flashable zip refuses wrong bases on purpose.** It checks `system ≥ 7000 MB`, `system_ext ≥ 2000 MB`, `product ≥ 900 MB` and aborts otherwise. That abort means your base is wrong — **do not bypass it**; the usual outcome is a bootloop on the logo.
+- **`vendor_boot` must match your base.** Regenerate it from *your own* `vendor_boot_a.img` with `tools/vb_repack.py`. A mismatched `vendor_boot` typically means no boot or dead touch.
+- **The base's vendor HAL decides which features work.** This port only replaces `system` / `system_ext` / `product`; `vendor` / `odm` / `vendor_dlkm` / `system_dlkm` and the whole boot chain stay stock. Different base, different results.
+- **Your own full-partition backup is the only rollback.** No backup, no safety net.
+
+## About ready-made flashable packages
+
+**This repository ships scripts, patches and docs — no images.**
+
+That is a licensing constraint, not laziness. A working package must contain a `vendor_boot` with a patched `first_stage_ramdisk/fstab.qcom`, which is a ZTE vendor binary; the `system` image also carries Qualcomm IMS apps and ZTE fingerprint apps extracted from stock firmware. Publishing those would mean redistributing vendor firmware, which contradicts this repo's "own work only" scope.
+
+So you get the reproducible path instead — all of it in `tools/`:
+
+```bash
+# 0) take vendor_boot_a.img from YOUR stock firmware, then remove the avb checks
+python tools/vb_unpack.py  vendor_boot_a.img ramdisk/          # inspect fstab.qcom
+python tools/vb_repack.py  vendor_boot_a.img vendor_boot_noverity.img
+
+# 1) recovery-flashable zip (self-checks the base)
+python tools/build_cardzip.py
+
+# 2) EDL package (base-capacity agnostic; writes vendor_boot to both slots, wipes data heads)
+python tools/build_edl_pack.py \
+    --images <dir with the three system images + vendor_boot_noverity.img> \
+    --super-head <first 512 KB of your own super> \
+    --out LOS-EDL.zip --zip-store
+
+# 3) dry-run before flashing
+powershell -File tools/flash_official_to_los.ps1 -Check
+```
+
+`vendor_boot_a/b`, `userdata` and `metadata` offsets in `build_edl_pack.py` are NX789J GPT constants; the `system/system_ext/product` offsets are recomputed from the super head you pass in, so switching bases needs no script edits.
+
+Full walkthrough: [`docs/17-从底包刷入LineageOS.md`](docs/17-从底包刷入LineageOS.md).
 
 ## How it works (and why it is done this way)
 

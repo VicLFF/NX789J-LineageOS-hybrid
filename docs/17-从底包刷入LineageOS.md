@@ -1,6 +1,13 @@
 # 从官方底包刷入 LineageOS（NX789J / 红魔 10S Pro+）
 
 > 全部步骤都是**实测流程**，最后更新：2026-10-22。
+
+> **实测记录**
+> * 2026-10-22：官方 **11.0.14** 底包上跑完整条链路（EDL 刷 OrangeFox → 橙狐内刷卡刷包 → 清 data → 开机），
+>   `sys.boot_completed=1`，SIM/通话/数据/刷新率/自动亮度/传感器/Wi-Fi 全部正常。
+>   卡刷包底包校验输出：`system 8275MB(16 段) / system_ext 2427MB(7 段) / product 1006MB(13 段)`。
+> * 更早版本在官方 **11.0.13** 上跑通过。
+> * **其它底包一概未验证**，属于自测范围，风险自负（详见仓库 README「测试范围」一节）。
 > 配套脚本：`tools/edl_flash.ps1`（EDL 刷三镜像）、`tools/edl_restore_official.ps1`（官方底包整机恢复）、
 > `tools/vb_unpack.py` / `tools/vb_repack.py`（改 vendor_boot 的 first-stage fstab）、
 > `tools/sparse2raw.py`、`tools/make_edl_los_xml.py`。

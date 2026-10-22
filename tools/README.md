@@ -7,7 +7,7 @@
 | 分组 | 用途 |
 |---|---|
 | 动态分区 | `extract_super.py` 从 `super.img` 抠出整分区；`patch_super.py` 按 extent 写回；`check_fs.py` 报告每个逻辑分区大小与文件系统；`make_edl_los_xml.py` 生成直写 `super` 内逻辑分区的 EDL XML；`sparse2raw.py` sparse → raw |
-| Boot 镜像 | `vb_unpack.py` / `vb_repack.py` 解包重打包 `vendor_boot`（去掉三个分区上 `,avb=vbmeta_system` 校验）；`extract_kernel.py` 从 boot 抽内核；`avb_info.py` 读 AVB 头与描述符；`build_cardzip.py` 做不绑定底包的卡刷包 |
+| Boot 镜像 | `vb_unpack.py` / `vb_repack.py` 解包重打包 `vendor_boot`（去掉三个分区上 `,avb=vbmeta_system` 校验）；`extract_kernel.py` 从 boot 抽内核；`avb_info.py` 读 AVB 头与描述符；`build_cardzip.py` 做卡刷包（自带官方底包校验）；`build_edl_pack.py` 做 EDL 线刷包（三个镜像 + vendor_boot 两槽 + 清 data 头） |
 | EDL | `edl_flash.ps1` 刷三张镜像；`edl_restore_official.ps1` 用 ZTE 官方工具箱（**ZTEToolBox**，作者 **酷安 @某贼**）导出的备份整机恢复（GPT + 全部分区） |
 | 指纹调试 | `fp_try.ps1/.cmd` 自动跑完整录入流程并抓日志；`patch_tsa_in_vendor.py` 是**已证明无效**的 vendor 补丁实验，仅留档；`../fpbridge/` 是那个把中兴指纹状态机推出 IDLE 的小 APK |
 
@@ -85,3 +85,8 @@ Gotchas that cost hours, in one place:
 | `fp_try.ps1` / `fp_try.cmd` | Drive the AOSP enrollment flow by itself (wake, PIN, uiautomator text navigation, fire the bridge APK's `sendMessageInfo(6)`, beep twice, capture 75 s of logcat, print a result table). Exists because the Goodix HAL aborts enrollment 60 s after the sensor screen opens — faster than a human round-trip. |
 | `patch_tsa_in_vendor.py` | Locate `libgdix_tsa.so` inside a `vendor_a.img` by signature and patch one instruction. **Documented as a dead end** — see the README's known issues. Kept for reference. |
 | `../fpbridge/` | The tiny APK that pokes ZTE's UDFPS state machine out of IDLE. |
+## 测试范围
+
+所有脚本只在**官方 RedMagicOS 11.0.13 / 11.0.14** 两个底包上验证过。其它底包（别的官方版本、第三方移植底包、OTA 未清数据的混合状态）未验证，自测风险自负。
+
+卡刷包内置底包校验（system ≥ 7000 MB、system_ext ≥ 2000 MB、product ≥ 900 MB），不达标会 abort —— 那是保护，不要绕过。
